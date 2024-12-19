@@ -1,0 +1,98 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "A bedrock agent that will crawl pubmed for articles connected to a Synapse project.",
+    "Parameters": {
+      "agentName": {
+        "Description": "synapse-pubmed-crawler",
+        "Type": "String",
+        "AllowedPattern": "^([0-9a-zA-Z][_-]?){1,100}$"
+      }
+    },
+    "Resources": {
+          "bedrockAgent": {
+              "Type": "AWS::Bedrock::Agent",
+              "Properties": {
+                  "ActionGroups": [
+                      {
+                          "ActionGroupExecutor": {
+                              "CustomControl": "RETURN_CONTROL"
+                          },
+                          "ActionGroupName": "org_sage_zero",
+                          "ActionGroupState": "ENABLED",
+                          "Description": "Use the functions in this action group to help the user lookup information about a Synapse entity/project.",
+                          "FunctionSchema": {
+                              "Functions": [
+                                  {
+                                      "Description": "Use this function to help a user execute a search against Synapse by providing the function with a search term from the user. The results should be displayed in a table with the following columns.  The first column should be a row counter starting with 1 and incrementing by 1 for each row.  The second column should contain the id (the syn number) of the result.  The third column should contain the name of the result.  The fourth column should contain a short summary of the description when available. Note: Some of the descriptions might end with: --truncated-- indicating that the full description could not be returned. You can get the full (non-trucated) description using the 'get_description' function.",
+                                      "Name": "org_sage_zero_search",
+                                      "Parameters": {
+                                          "term": {
+                                              "Description": "The search term from the user that will be used as the search input.",
+                                              "Required": true,
+                                              "Type": "string"
+                                          }
+                                      }
+                                  },
+                                  {
+                                      "Description": "Use this function to get the full description of any entity. This can be used for cases where a description has been marked as --truncated-- .",
+                                      "Name": "org_sage_zero_get_description",
+                                      "Parameters": {
+                                          "synId": {
+                                              "Description": "The 'syn' Id of the entity to get the description for.",
+                                              "Required": true,
+                                              "Type": "string"
+                                          }
+                                      }
+                                  },
+                                  {
+                                      "Description": "Use this function to get metadata about any entity in Synapse.  This metadata includes user provided annotations, the user's permission information about the entity, and the entity's access control list (ACL).  If the entity is a table or view this will include information about its schema.  It will also include path information that defines where this entity resides in its hierarchy.",
+                                      "Name": "org_sage_zero_get_entity_metadata",
+                                      "Parameters": {
+                                          "synId": {
+                                              "Description": "The 'syn' Id of the entity to get the metadata for.",
+                                              "Required": true,
+                                              "Type": "string"
+                                          }
+                                      }
+                                  }
+                              ]
+                          },
+                          "SkipResourceInUseCheckOnDelete": false
+                      },
+                      {
+                          "ActionGroupName": "pubmed_search",
+                          "ActionGroupExecutor": {
+                              "Lambda": "arn:aws:lambda:us-east-1:050451359079:function:pubmed-search"
+                          },
+                          "ActionGroupState": "ENABLED",
+                          "Description": "Use the functions in this action group to help the user search pubmed for articles connected to a Synapse project.",
+                          "FunctionSchema": {
+                              "Functions": [
+                                  {
+                                      "Description": "Use this function to search pubmed for articles connected to a Synapse project. Use the `synId` parameter as a search term in the pubmed search. Return the results as a list of article titles.",
+                                      "Name": "search_pubmed_central",
+                                      "Parameters": {
+                                          "synId": {
+                                              "Description": "The 'syn' Id of the entity to search pubmed for.",
+                                              "Required": true,
+                                              "Type": "string"
+                                          }
+                                      }
+                                  }
+                              ]
+                          }
+                      }
+                  ],
+                  "AgentName": { "Ref" : "agentName" },
+                  "AgentResourceRoleArn": "arn:aws:iam::050451359079:role/bedrock-agent-role-bedrockAgentRole-uVdCv8WImmcJ",
+                  "AutoPrepare": true,
+                  "Description": "A bedrock agent that will crawl pubmed for articles connected to a Synapse project.",
+                  "FoundationModel": "anthropic.claude-3-sonnet-20240229-v1:0",
+                  "IdleSessionTTLInSeconds": 3600,
+                  "Instruction": "You are are an expert in navigating pubmed. You will be prompted with the name of a Synapse project. You will first search Synapse for that project title and lookup its ID. You will then confirm the entity is what the user wants to search pubmed for. You will then search pubmed for articles that site the specific Synapse ID provided using the search_pubmed_central function. You will create a list of articles and return their titles to the user. If there are no articles, you will inform the user that no articles were found. Throughout everything you do give a detailed commentary on what you are doing and why.",
+                  "SkipResourceInUseCheckOnDelete": true
+              }
+          }
+      }
+  }
+  
